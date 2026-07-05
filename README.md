@@ -1,5 +1,9 @@
 # Swiper · 极简划词 AI 助手
 
+[![CI](https://github.com/Mrzhuo2022/Swiper/actions/workflows/ci.yml/badge.svg)](https://github.com/Mrzhuo2022/Swiper/actions/workflows/ci.yml)
+[![Release](https://github.com/Mrzhuo2022/Swiper/actions/workflows/release.yml/badge.svg)](https://github.com/Mrzhuo2022/Swiper/actions/workflows/release.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+
 极简 Windows 划词助手。选中文字一键召唤，**翻译 / 总结 / 润色 / 解释 / 提问**五种动作，截图 **OCR 识别**，统一以 LLM 为核心。**性能优先、占用极低、无臃肿功能**，避开 Electron 的体积与内存开销。
 
 - **技术栈**：Tauri 2 + Svelte 5 + Rust

@@ -1,0 +1,81 @@
+name: Release
+
+# 打 tag 触发发布；workflow_dispatch 供手动重跑（需填 tag 名）。
+# 流程：构建 NSIS/MSI → softprops/action-gh-release 创建 Release 并挂安装包。
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要发布的 tag 名（如 v0.1.0）。tag 不存在会在此 SHA 自动创建。'
+        required: true
+
+# action-gh-release 需要写权限来创建 Release / Tag / 上传资源
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install Rust (stable, MSVC)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install JS deps
+        run: pnpm install --frozen-lockfile
+
+      # tauri.conf.json 的 beforeBuildCommand = "pnpm build"，自动跑 vite build
+      - name: Build (Tauri)
+        run: pnpm tauri build
+
+      # 从 tauri.conf.json 读版本号，用于 Release 标题 & 与 tag 比对
+      - name: Read version
+        id: ver
+        shell: pwsh
+        run: |
+          $v = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          "version=$v" >> $env:GITHUB_OUTPUT
+          Write-Host "tauri.conf.json version = $v"
+
+      - name: Check tag ↔ version match
+        shell: pwsh
+        run: |
+          # tag push → github.ref_name 是 tag；workflow_dispatch → 用 input
+          $tag = "${{ github.event.inputs.tag || github.ref_name }}"
+          $tagVer = $tag -replace '^v', ''
+          $cfgVer = "${{ steps.ver.outputs.version }}"
+          Write-Host "tag=$tag  tagVer=$tagVer  configVer=$cfgVer"
+          if ($tagVer -ne $cfgVer) {
+            Write-Host "::warning::tag '$tag' ($tagVer) 与 tauri.conf.json 版本 ($cfgVer) 不一致。安装包文件名仍用 $cfgVer。建议先改 tauri.conf.json 再打 tag。"
+          }
+
+      - name: Create GitHub Release & upload installers
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: Swiper ${{ steps.ver.outputs.version }}
+          # 自动从上一个 tag 到本次的 commit 生成 changelog
+          generate_release_notes: true
+          files: |
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/msi/*.msi
