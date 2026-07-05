@@ -1,0 +1,74 @@
+[package]
+name = "swiper"
+version = "0.1.0"
+description = "极简 Windows 划词翻译桌面软件"
+authors = ["Swiper"]
+edition = "2021"
+rust-version = "1.77.2"
+
+# 库定义：Tauri 需要一个 lib 目标以支持 mobile（即使本应用只做桌面，保持官方推荐结构）
+[lib]
+name = "swiper_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-store = "2"
+# unsafe-headers：允许前端设置 Origin 等 forbidden 头。
+# 用于本地 Ollama OCR —— Tauri2 Win 的 WebView Origin 是 http://tauri.localhost，
+# 部分 Ollama 版本未放行会报 403；前端钉死 Origin: http://localhost 绕过。
+tauri-plugin-http = { version = "2", features = ["unsafe-headers"] }
+tauri-plugin-autostart = "2"
+
+# 取词核心：UI Automation 优先 + Ctrl+C 兜底（剪贴板备份还原）
+selection = "1.2"
+# 读鼠标物理坐标（悬浮窗定位用）
+mouse_position = "0.1"
+# PNG 编码（LLM OCR 把截图 BGRA→PNG→base64 发给多模态模型）。已在依赖树，直接依赖。
+image = { version = "0.25", default-features = false, features = ["png"] }
+# HTTP 客户端（LLM OCR 发多模态请求）。已在依赖树(tauri-plugin-http)，直接依赖。
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+# Win32 API：DWM 阴影 + GDI 截屏（BitBlt/GetDIBits）
+windows-sys = { version = "0.59", features = [
+    "Win32_Graphics_Dwm",
+    "Win32_Graphics_Gdi",
+    "Win32_UI_Controls",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_Foundation",
+] }
+# WinRT OcrEngine（Windows 系统 OCR，离线免装）。已在依赖树，这里加直接依赖 + feature。
+# 用 target cfg 限制只在 Windows 编译（其他平台无此 API）。
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.61", features = [
+    "Media_Ocr",
+    "Graphics_Imaging",
+    "Storage_Streams",
+    "Foundation",
+] }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[features]
+# 默认 release 隐藏控制台窗口
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+# cookie 0.18.1 与 time >=0.3.45 不兼容（time 的 Parsable::parse 新签名需要两个参数：
+# input 与 defaults），而 tauri（经 plist）强制要求 time >=0.3.47。crates.io 上 cookie
+# 0.18.x 尚未发布修复版，上游 master 也未修。故用本地 vendored 副本打一行补丁
+# （parse 调用补 None 默认值）。见 vendor/cookie/src/parse.rs。
+[patch.crates-io]
+cookie = { path = "../vendor/cookie" }
+
+[profile.release]
+# 极致体积优化（DESIGN 目标 <10MB）
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
