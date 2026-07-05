@@ -51,6 +51,11 @@ jobs:
         working-directory: src-tauri
         run: cargo fmt --check
 
+      # 生成 dist/：tauri::generate_context!() 是编译期宏，会读取
+      # tauri.conf.json 的 frontendDist 目录嵌入资源，dist 不存在则 panic。
+      - name: Build frontend (for generate_context!)
+        run: pnpm build
+
       - name: cargo clippy
         working-directory: src-tauri
         run: cargo clippy --all-targets -- -D warnings
